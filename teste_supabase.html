@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste Supabase - Suporte360</title>
+  <style>
+    body{font-family:Arial,sans-serif;max-width:860px;margin:40px auto;padding:0 20px;line-height:1.45;background:#f8fafc;color:#0f172a}
+    button{background:#2563eb;color:white;border:0;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}
+    pre{background:#0f172a;color:#dbeafe;padding:16px;border-radius:12px;white-space:pre-wrap;min-height:180px}
+    .ok{color:#15803d;font-weight:700}.err{color:#b91c1c;font-weight:700}
+  </style>
+</head>
+<body>
+  <h1>Teste Supabase - Suporte360</h1>
+  <p>Este teste verifica se o navegador consegue conectar no Supabase e ler as tabelas <b>usuarios</b>, <b>chamados</b> e <b>comentarios</b>.</p>
+  <button onclick="testarSupabase()">Testar Supabase</button>
+  <p id="status">Aguardando teste...</p>
+  <pre id="saida"></pre>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    async function testarSupabase(){
+      const cfg = window.SUPABASE_CONFIG || {};
+      const saida = $('#saida');
+      const status = $('#status');
+      saida.textContent = '';
+      status.textContent = 'Testando...';
+      status.className = '';
+
+      try{
+        if(!cfg.url || !cfg.anonKey){
+          throw new Error('SUPABASE_CONFIG está vazio no config.js.');
+        }
+        if(!window.supabase){
+          throw new Error('Biblioteca supabase-js não carregou. Verifique internet/CDN.');
+        }
+
+        const sb = window.supabase.createClient(cfg.url, cfg.anonKey);
+        const resultados = {};
+
+        for(const tabela of ['usuarios','chamados','comentarios']){
+          const { data, error } = await sb.from(tabela).select('*').limit(5);
+          if(error){
+            resultados[tabela] = { ok:false, erro:error.message, code:error.code || null };
+          }else{
+            resultados[tabela] = { ok:true, quantidade:data.length, exemplo:data[0] || null };
+          }
+        }
+
+        const ok = Object.values(resultados).every(r => r.ok);
+        status.textContent = ok ? 'Conectado ao Supabase com sucesso.' : 'Conectou, mas alguma tabela deu erro.';
+        status.className = ok ? 'ok' : 'err';
+        saida.textContent = JSON.stringify(resultados, null, 2);
+      }catch(e){
+        status.textContent = 'Erro no teste.';
+        status.className = 'err';
+        saida.textContent = String(e.message || e);
+      }
+    }
+  </script>
+</body>
+</html>
