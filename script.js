@@ -13,7 +13,7 @@ const sb = USE_DB ? window.supabase.createClient(CFG.url, CFG.anonKey) : null;
 /* ---------- Cadastros locais (apoio) ---------- */
 const LK = 's360_cadastros';
 const seedCad = {
-  setores:[{nome:'Financeiro',resp:'Marcos Lima'},{nome:'RH',resp:'Júlia Reis'},{nome:'Comercial',resp:'Marcos Lima'},{nome:'Recepção',resp:'Júlia Reis'}],
+  setores:[{nome:'Financeiro',resp:''},{nome:'RH',resp:''},{nome:'Comercial',resp:''},{nome:'Recepção',resp:''}],
   unidades:[{nome:'Matriz',cidade:'Blumenau',uf:'SC'}],
   weatherKey: WEATHER_CFG.apiKey || '',
   weatherCity: WEATHER_CFG.city || 'Blumenau',
@@ -460,8 +460,13 @@ renderers.setores=async()=>{ const c=cad(); const sup=await api.listUsuarios('su
     <div><label for="s-nome">Setor</label><input id="s-nome" value="Logística"></div>
     <div><label for="s-resp">Responsável (suporte)</label><select id="s-resp">${sup.length?sup.map(x=>`<option>${x.nome}</option>`).join(''):'<option value="">Cadastre um suporte primeiro</option>'}</select></div>
     <div class="form-actions"><button class="btn primary" type="submit">Salvar setor</button></div></form></article>
-    ${listPanel('Cadastrados',['Setor','Responsável'],c.setores.map(s=>`<tr><td>${s.nome}</td><td>${s.resp||'—'}</td></tr>`).join(''))}</div>`; };
+    ${listPanel('Cadastrados',['Setor','Responsável',''],c.setores.map((s,i)=>`<tr><td>${s.nome}</td><td>${s.resp||'—'}</td><td><button class="row-btn del" onclick="delSetor(${i})" title="Excluir setor"><i class="bi bi-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="3" class="muted">Nenhum setor cadastrado.</td></tr>')}</div>`; };
 afterRender.setores=async()=>$('#setForm').addEventListener('submit',e=>{e.preventDefault();const c=cad();const resp=$('#s-resp').value;if(!resp){showToast('Não há suporte cadastrado para ser responsável.','error');return;}c.setores.push({nome:$('#s-nome').value,resp});saveCad(c);showToast('Setor salvo!');navigate('setores');});
+function delSetor(i){
+  const c=cad(); const s=c.setores[i]; if(!s) return;
+  if(!confirm('Excluir o setor "'+s.nome+'"?')) return;
+  c.setores.splice(i,1); saveCad(c); showToast('Setor excluído.','info'); navigate('setores');
+}
 
 renderers.unidades=async()=>{ const c=cad(); return `<div class="section-head"><div><h3>Unidades</h3><p>Locais de atendimento. O CEP preenche o endereço via API ViaCEP.</p></div></div>
   <div class="grid-2"><article class="panel"><form id="uniForm" class="form-grid">
