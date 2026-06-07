@@ -232,3 +232,6 @@ table.dataTable tbody td{padding:12px 10px;border-bottom:1px solid var(--border)
 .msg-box input{flex:1;border:1px solid var(--border);border-radius:12px;padding:11px 13px;background:var(--panel-2);color:var(--text);font:inherit;outline:none}
 .msg-box input:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--ring)}
 .msg-box .btn{padding:11px 15px}
+
+/* aviso de mínimo de caracteres no cadastro */
+.senha-hint{display:block;color:var(--muted);font-size:13px;margin:-2px 0 6px}

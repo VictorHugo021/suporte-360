@@ -13,7 +13,7 @@ const sb = USE_DB ? window.supabase.createClient(CFG.url, CFG.anonKey) : null;
 /* ---------- Cadastros locais (apoio) ---------- */
 const LK = 's360_cadastros';
 const seedCad = {
-  setores:[{nome:'Financeiro',resp:'Ana Oliveira'},{nome:'RH',resp:'Rui Antunes'},{nome:'Comercial',resp:'Paula Dias'},{nome:'Recepção',resp:'Bia Nunes'}],
+  setores:[{nome:'Financeiro',resp:'Marcos Lima'},{nome:'RH',resp:'Júlia Reis'},{nome:'Comercial',resp:'Marcos Lima'},{nome:'Recepção',resp:'Júlia Reis'}],
   unidades:[{nome:'Matriz',cidade:'Blumenau',uf:'SC'}],
   weatherKey: WEATHER_CFG.apiKey || '',
   weatherCity: WEATHER_CFG.city || 'Blumenau',
@@ -142,6 +142,7 @@ document.querySelectorAll('#authTabs .seg-btn').forEach(b=>b.addEventListener('c
   const criar=authMode==='criar';
   $('#nomeWrap').classList.toggle('hidden',!criar);
   $('#senha2Wrap').classList.toggle('hidden',!criar);
+  $('#senhaHint').classList.toggle('hidden',!criar);
   $('#roleWrap').classList.toggle('hidden',!criar);
   $('#authSubmit').textContent=criar?'Criar conta':'Entrar';
   $('#loginSub').textContent=criar?'Crie sua conta de cliente ou de suporte.':'Entre com sua conta.';
@@ -177,13 +178,18 @@ $('#loginForm').addEventListener('submit',async(e)=>{
   }catch(ex){ err.textContent=ex.message||String(ex); }
 });
 
-$('#togglePassword').onclick=function(){
-  const s=$('#senha'), show=s.type==='password';
-  s.type=show?'text':'password';
-  this.querySelector('i').className=show?'bi bi-eye-slash':'bi bi-eye';
-  this.setAttribute('aria-pressed',String(show));
-  this.setAttribute('aria-label',show?'Ocultar senha':'Mostrar senha');
-};
+function ligarOlho(btnId, inputId){
+  const btn=$('#'+btnId); if(!btn) return;
+  btn.onclick=function(){
+    const s=$('#'+inputId), show=s.type==='password';
+    s.type=show?'text':'password';
+    this.querySelector('i').className=show?'bi bi-eye-slash':'bi bi-eye';
+    this.setAttribute('aria-pressed',String(show));
+    this.setAttribute('aria-label',show?'Ocultar senha':'Mostrar senha');
+  };
+}
+ligarOlho('togglePassword','senha');
+ligarOlho('togglePassword2','senha2');
 
 function enterApp(){
   $('#loginScreen').classList.add('hidden');
@@ -284,10 +290,7 @@ renderers.dashboard=async()=>{
     <article class="metric"><div class="ico i-green"><i class="bi bi-check2-circle"></i></div><strong>${c.concluido}</strong><span>Concluídos</span></article>
     <article class="metric"><div class="ico i-cyan"><i class="bi bi-collection"></i></div><strong>${c.total}</strong><span>Total</span></article>
   </div>
-  <div class="grid-2">
-    <article class="panel"><h3>Volume por dia (últimos 7 dias)</h3><div class="chart-wrap"><canvas id="trendChart"></canvas></div></article>
-    <article class="panel"><h3>Distribuição por status</h3><div class="chart-wrap"><canvas id="statusChart"></canvas></div></article>
-  </div>
+  <article class="panel"><h3>Distribuição por status</h3><div class="chart-wrap" style="height:300px"><canvas id="statusChart"></canvas></div></article>
   <article class="panel" style="margin-top:16px"><h3>Fila de prioridade</h3>
     ${fila.length?fila.map(t=>`<div class="queue-item"><span class="dot" style="background:${t.prioridade==='Alta'?'var(--danger)':t.prioridade==='Média'?'var(--warning)':'var(--success)'}"></span>
       <div style="flex:1"><strong>${t.titulo}</strong><br><small class="muted">${t.setor||'—'} · ${t.solicitante}</small></div>${pill(t.prioridade)} ${pill(t.status)}
@@ -302,8 +305,7 @@ afterRender.dashboard=async()=>{
   const dark=document.documentElement.getAttribute('data-theme')==='dark';
   const grid=dark?'rgba(255,255,255,.08)':'rgba(15,23,42,.07)', txt=dark?'#9fb0c7':'#5b6b82';
   if(window._charts)window._charts.forEach(ch=>ch.destroy()); window._charts=[];
-  const tr=$('#trendChart'), st=$('#statusChart');
-  if(tr&&window.Chart)window._charts.push(new Chart(tr,{type:'bar',data:{labels:['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],datasets:[{data:[5,8,6,9,7,3,2],backgroundColor:'#2563eb',borderRadius:6,maxBarThickness:26}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:txt}},y:{grid:{color:grid},ticks:{color:txt}}}}}));
+  const st=$('#statusChart');
   if(st&&window.Chart)window._charts.push(new Chart(st,{type:'doughnut',data:{labels:['Abertos','Em andamento','Concluídos'],datasets:[{data:[c.abertos,c.andamento,c.concluido],backgroundColor:['#2563eb','#d97706','#16a34a'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:txt,padding:14}}}}}));
 };
 
@@ -314,6 +316,7 @@ renderers.novoChamado=async()=>{
   <article class="panel"><form id="ticketForm" class="form-grid">
     <div class="span-2"><label for="f-titulo">Título</label><input id="f-titulo" required placeholder="Resuma o problema"></div>
     <div><label for="f-setor">Setor</label><select id="f-setor">${c.setores.map(s=>`<option>${s.nome}</option>`).join('')}</select></div>
+    <div><label for="f-resp">Responsável pelo setor</label><input id="f-resp" readonly placeholder="Selecione um setor"></div>
     <div><label for="f-prio">Prioridade</label><select id="f-prio"><option>Alta</option><option selected>Média</option><option>Baixa</option></select></div>
     <div class="span-2"><label for="f-desc">Descrição</label><textarea id="f-desc" placeholder="Explique o que está acontecendo..."></textarea></div>
     <div class="form-actions"><button class="btn primary" type="submit"><i class="bi bi-send"></i> Enviar chamado</button>
@@ -321,12 +324,16 @@ renderers.novoChamado=async()=>{
   </form></article>`;
 };
 afterRender.novoChamado=async()=>{
+  const setores=cad().setores;
+  const setSel=$('#f-setor'), respIn=$('#f-resp');
+  function preencherResp(){ const s=setores.find(x=>x.nome===setSel.value); respIn.value = s ? (s.resp||'—') : '—'; }
+  setSel.addEventListener('change', preencherResp); preencherResp();
   $('#ticketForm').addEventListener('submit',async(e)=>{
     e.preventDefault();
     const titulo=$('#f-titulo').value.trim();
     if(!titulo){ showToast('Informe um título para o chamado.','error'); return; }
     try{
-      const novo=await api.createChamado({titulo,descricao:$('#f-desc').value,solicitante:session.nome,solicitante_email:session.email,setor:$('#f-setor').value,prioridade:$('#f-prio').value,tecnico:'—'});
+      const novo=await api.createChamado({titulo,descricao:$('#f-desc').value,solicitante:session.nome,solicitante_email:session.email,setor:$('#f-setor').value,prioridade:$('#f-prio').value,tecnico:respIn.value||'—'});
       showToast('Chamado #'+novo.id+' enviado com sucesso!');
       navigate('chamados');
     }catch(err){ showToast('Erro ao salvar: '+(err.message||err),'error'); }
@@ -448,13 +455,13 @@ async function delUser(id){
   catch(e){ showToast('Erro ao excluir: '+(e.message||e),'error'); }
 }
 
-renderers.setores=async()=>{ const c=cad(); return `<div class="section-head"><div><h3>Setores</h3><p>Áreas internas.</p></div></div>
+renderers.setores=async()=>{ const c=cad(); const sup=await api.listUsuarios('suporte'); return `<div class="section-head"><div><h3>Setores</h3><p>Áreas internas. O responsável deve ser um usuário de suporte.</p></div></div>
   <div class="grid-2"><article class="panel"><form id="setForm" class="form-grid">
     <div><label for="s-nome">Setor</label><input id="s-nome" value="Logística"></div>
-    <div><label for="s-resp">Responsável</label><input id="s-resp" value="Responsável"></div>
+    <div><label for="s-resp">Responsável (suporte)</label><select id="s-resp">${sup.length?sup.map(x=>`<option>${x.nome}</option>`).join(''):'<option value="">Cadastre um suporte primeiro</option>'}</select></div>
     <div class="form-actions"><button class="btn primary" type="submit">Salvar setor</button></div></form></article>
-    ${listPanel('Cadastrados',['Setor','Responsável'],c.setores.map(s=>`<tr><td>${s.nome}</td><td>${s.resp}</td></tr>`).join(''))}</div>`; };
-afterRender.setores=async()=>$('#setForm').addEventListener('submit',e=>{e.preventDefault();const c=cad();c.setores.push({nome:$('#s-nome').value,resp:$('#s-resp').value});saveCad(c);showToast('Setor salvo!');navigate('setores');});
+    ${listPanel('Cadastrados',['Setor','Responsável'],c.setores.map(s=>`<tr><td>${s.nome}</td><td>${s.resp||'—'}</td></tr>`).join(''))}</div>`; };
+afterRender.setores=async()=>$('#setForm').addEventListener('submit',e=>{e.preventDefault();const c=cad();const resp=$('#s-resp').value;if(!resp){showToast('Não há suporte cadastrado para ser responsável.','error');return;}c.setores.push({nome:$('#s-nome').value,resp});saveCad(c);showToast('Setor salvo!');navigate('setores');});
 
 renderers.unidades=async()=>{ const c=cad(); return `<div class="section-head"><div><h3>Unidades</h3><p>Locais de atendimento. O CEP preenche o endereço via API ViaCEP.</p></div></div>
   <div class="grid-2"><article class="panel"><form id="uniForm" class="form-grid">
