@@ -13,8 +13,8 @@ const sb = USE_DB ? window.supabase.createClient(CFG.url, CFG.anonKey) : null;
 /* ---------- Cadastros locais (apoio) ---------- */
 const LK = 's360_cadastros';
 const seedCad = {
-  setores:[{nome:'Financeiro',resp:''},{nome:'RH',resp:''},{nome:'Comercial',resp:''},{nome:'Recepção',resp:''}],
-  unidades:[{nome:'Matriz',cidade:'Blumenau',uf:'SC'}],
+  setores:[],
+  unidades:[],
   weatherKey: WEATHER_CFG.apiKey || '',
   weatherCity: WEATHER_CFG.city || 'Blumenau',
   weatherLat: Number.isFinite(Number(WEATHER_CFG.lat)) ? Number(WEATHER_CFG.lat) : -26.91889,
@@ -78,6 +78,32 @@ const api = {
   async deleteUsuario(id){
     if (USE_DB){ const {error}=await sb.from('usuarios').delete().eq('id',id); if(error)throw error; return; }
     saveUsuarios(usuariosLocal().filter(x=>x.id!=id));
+  },
+  /* ----- Setores (banco com reserva local) ----- */
+  async listSetores(){
+    if (USE_DB){ try{ const {data,error}=await sb.from('setores').select('*').order('nome'); if(error)throw error; return data; }catch(e){ console.warn('setores DB:',e.message); } }
+    return cad().setores;
+  },
+  async createSetor(o){
+    if (USE_DB){ try{ const {data,error}=await sb.from('setores').insert(o).select().single(); if(error)throw error; return data; }catch(e){ console.warn('setores DB:',e.message); } }
+    const c=cad(); const novo={id:Date.now(),...o}; c.setores.push(novo); saveCad(c); return novo;
+  },
+  async deleteSetor(id){
+    if (USE_DB){ try{ const {error}=await sb.from('setores').delete().eq('id',id); if(!error) return; }catch(e){ console.warn('setores DB:',e.message); } }
+    const c=cad(); c.setores=c.setores.filter(s=>String(s.id)!==String(id)); saveCad(c);
+  },
+  /* ----- Unidades (banco com reserva local) ----- */
+  async listUnidades(){
+    if (USE_DB){ try{ const {data,error}=await sb.from('unidades').select('*').order('nome'); if(error)throw error; return data; }catch(e){ console.warn('unidades DB:',e.message); } }
+    return cad().unidades;
+  },
+  async createUnidade(o){
+    if (USE_DB){ try{ const {data,error}=await sb.from('unidades').insert(o).select().single(); if(error)throw error; return data; }catch(e){ console.warn('unidades DB:',e.message); } }
+    const c=cad(); const novo={id:Date.now(),...o}; c.unidades.push(novo); saveCad(c); return novo;
+  },
+  async deleteUnidade(id){
+    if (USE_DB){ try{ const {error}=await sb.from('unidades').delete().eq('id',id); if(!error) return; }catch(e){ console.warn('unidades DB:',e.message); } }
+    const c=cad(); c.unidades=c.unidades.filter(u=>String(u.id)!==String(id)); saveCad(c);
   },
   /* ----- Chamados ----- */
   async listChamados(email){
@@ -311,11 +337,11 @@ afterRender.dashboard=async()=>{
 
 /* ---------- Novo chamado ---------- */
 renderers.novoChamado=async()=>{
-  const c=cad();
+  const setores=await api.listSetores();
   return `<div class="section-head"><div><h3>Abrir novo chamado</h3><p>Descreva o problema para a equipe de suporte.</p></div></div>
   <article class="panel"><form id="ticketForm" class="form-grid">
     <div class="span-2"><label for="f-titulo">Título</label><input id="f-titulo" required placeholder="Resuma o problema"></div>
-    <div><label for="f-setor">Setor</label><select id="f-setor">${c.setores.map(s=>`<option>${s.nome}</option>`).join('')}</select></div>
+    <div><label for="f-setor">Setor</label><select id="f-setor">${setores.length?setores.map(s=>`<option>${s.nome}</option>`).join(''):'<option value="">Nenhum setor cadastrado</option>'}</select></div>
     <div><label for="f-resp">Responsável pelo setor</label><input id="f-resp" readonly placeholder="Selecione um setor"></div>
     <div><label for="f-prio">Prioridade</label><select id="f-prio"><option>Alta</option><option selected>Média</option><option>Baixa</option></select></div>
     <div class="span-2"><label for="f-desc">Descrição</label><textarea id="f-desc" placeholder="Explique o que está acontecendo..."></textarea></div>
@@ -324,7 +350,7 @@ renderers.novoChamado=async()=>{
   </form></article>`;
 };
 afterRender.novoChamado=async()=>{
-  const setores=cad().setores;
+  const setores=await api.listSetores();
   const setSel=$('#f-setor'), respIn=$('#f-resp');
   function preencherResp(){ const s=setores.find(x=>x.nome===setSel.value); respIn.value = s ? (s.resp||'—') : '—'; }
   setSel.addEventListener('change', preencherResp); preencherResp();
@@ -455,20 +481,20 @@ async function delUser(id){
   catch(e){ showToast('Erro ao excluir: '+(e.message||e),'error'); }
 }
 
-renderers.setores=async()=>{ const c=cad(); const sup=await api.listUsuarios('suporte'); return `<div class="section-head"><div><h3>Setores</h3><p>Áreas internas. O responsável deve ser um usuário de suporte.</p></div></div>
+renderers.setores=async()=>{ const sup=await api.listUsuarios('suporte'); const setores=await api.listSetores(); return `<div class="section-head"><div><h3>Setores</h3><p>Áreas internas. O responsável deve ser um usuário de suporte.</p></div></div>
   <div class="grid-2"><article class="panel"><form id="setForm" class="form-grid">
     <div><label for="s-nome">Setor</label><input id="s-nome" value="Logística"></div>
     <div><label for="s-resp">Responsável (suporte)</label><select id="s-resp">${sup.length?sup.map(x=>`<option>${x.nome}</option>`).join(''):'<option value="">Cadastre um suporte primeiro</option>'}</select></div>
     <div class="form-actions"><button class="btn primary" type="submit">Salvar setor</button></div></form></article>
-    ${listPanel('Cadastrados',['Setor','Responsável',''],c.setores.map((s,i)=>`<tr><td>${s.nome}</td><td>${s.resp||'—'}</td><td><button class="row-btn del" onclick="delSetor(${i})" title="Excluir setor"><i class="bi bi-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="3" class="muted">Nenhum setor cadastrado.</td></tr>')}</div>`; };
-afterRender.setores=async()=>$('#setForm').addEventListener('submit',e=>{e.preventDefault();const c=cad();const resp=$('#s-resp').value;if(!resp){showToast('Não há suporte cadastrado para ser responsável.','error');return;}c.setores.push({nome:$('#s-nome').value,resp});saveCad(c);showToast('Setor salvo!');navigate('setores');});
-function delSetor(i){
-  const c=cad(); const s=c.setores[i]; if(!s) return;
-  if(!confirm('Excluir o setor "'+s.nome+'"?')) return;
-  c.setores.splice(i,1); saveCad(c); showToast('Setor excluído.','info'); navigate('setores');
+    ${listPanel('Cadastrados',['Setor','Responsável',''],setores.map(s=>`<tr><td>${s.nome}</td><td>${s.resp||'—'}</td><td><button class="row-btn del" onclick="delSetor('${s.id}')" title="Excluir setor"><i class="bi bi-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="3" class="muted">Nenhum setor cadastrado.</td></tr>')}</div>`; };
+afterRender.setores=async()=>$('#setForm').addEventListener('submit',async e=>{e.preventDefault();const resp=$('#s-resp').value;const nome=$('#s-nome').value.trim();if(!nome){showToast('Informe o nome do setor.','error');return;}if(!resp){showToast('Não há suporte cadastrado para ser responsável.','error');return;}try{await api.createSetor({nome,resp});showToast('Setor salvo!');navigate('setores');}catch(err){showToast('Erro ao salvar: '+(err.message||err),'error');}});
+async function delSetor(id){
+  if(!confirm('Confirma a exclusão deste setor?')) return;
+  try{ await api.deleteSetor(id); showToast('Setor excluído.','info'); navigate('setores'); }
+  catch(e){ showToast('Erro ao excluir: '+(e.message||e),'error'); }
 }
 
-renderers.unidades=async()=>{ const c=cad(); return `<div class="section-head"><div><h3>Unidades</h3><p>Locais de atendimento. O CEP preenche o endereço via API ViaCEP.</p></div></div>
+renderers.unidades=async()=>{ const unidades=await api.listUnidades(); return `<div class="section-head"><div><h3>Unidades</h3><p>Locais de atendimento. O CEP preenche o endereço via API ViaCEP.</p></div></div>
   <div class="grid-2"><article class="panel"><form id="uniForm" class="form-grid">
     <div><label for="u-nome">Unidade</label><input id="u-nome" value="Filial Centro"></div>
     <div><label for="cep">CEP</label><input id="cep" maxlength="9" value="89010025"></div>
@@ -476,11 +502,11 @@ renderers.unidades=async()=>{ const c=cad(); return `<div class="section-head"><
     <div><label for="cidade">Cidade</label><input id="cidade"></div><div><label for="uf">UF</label><input id="uf"></div>
     <div class="form-actions"><button class="btn primary" type="submit">Salvar unidade</button></div></form>
     <p class="muted" style="margin-top:12px"><i class="bi bi-info-circle"></i> Ao sair do campo CEP, o endereço é preenchido automaticamente.</p></article>
-    ${listPanel('Cadastradas',['Unidade','Cidade','UF'],c.unidades.map(u=>`<tr><td>${u.nome}</td><td>${u.cidade}</td><td>${u.uf}</td></tr>`).join(''))}</div>`; };
+    ${listPanel('Cadastradas',['Unidade','Cidade','UF'],unidades.map(u=>`<tr><td>${u.nome}</td><td>${u.cidade}</td><td>${u.uf}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">Nenhuma unidade cadastrada.</td></tr>')}</div>`; };
 afterRender.unidades=async()=>{
   const cep=$('#cep'); cep.addEventListener('blur',buscarCep);
   cep.addEventListener('input',()=>{let v=cep.value.replace(/\D/g,'').slice(0,8);cep.value=v.length>5?v.slice(0,5)+'-'+v.slice(5):v;});
-  $('#uniForm').addEventListener('submit',e=>{e.preventDefault();const c=cad();c.unidades.push({nome:$('#u-nome').value,cidade:$('#cidade').value||'-',uf:$('#uf').value||'-'});saveCad(c);showToast('Unidade salva!');navigate('unidades');});
+  $('#uniForm').addEventListener('submit',async e=>{e.preventDefault();try{await api.createUnidade({nome:$('#u-nome').value,cidade:$('#cidade').value||'-',uf:$('#uf').value||'-'});showToast('Unidade salva!');navigate('unidades');}catch(err){showToast('Erro ao salvar: '+(err.message||err),'error');}});
   buscarCep();
 };
 async function buscarCep(){
